@@ -29,3 +29,4 @@ This repository specifies default features corresponding to the zprize competiti
 ```
 cargo bench
 ```
+To specify the window size in the Pippenger algorithm, pass the flag CXXFLAGS="-D WBITS=17". For BLS12-377, a window of size 17 seems to give the best results but it is up to competitors to specify it.
