@@ -11,8 +11,8 @@ rustup install stable
 After that, use cargo, the standard Rust build tool, to build the libraries:
 
 ```
-git clone https://github.com/arkworks-rs/algebra.git
-cd algebra
+git clone https://github.com/yelhousni/zprize-GPU-MSM-harness.git
+cd zprize-GPU-MSM-harness
 cargo build --release
 ```
 
