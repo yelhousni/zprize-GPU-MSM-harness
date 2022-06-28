@@ -5,8 +5,35 @@
 use std::env;
 use std::path::PathBuf;
 
+fn feature_check() {
+    let curves = ["bn254", "bls12_377", "bls12_381"];
+    let curves_as_features: Vec<String> = (0..curves.len())
+        .map(|i| format!("CARGO_FEATURE_{}", curves[i].to_uppercase()))
+        .collect();
+
+    let mut curve_counter = 0;
+    for curve_feature in curves_as_features.iter() {
+        curve_counter += env::var(&curve_feature).is_ok() as i32;
+    }
+
+    match curve_counter {
+        0 => panic!("Can't run without a curve being specified, please select one with --features=<curve>. Available options are\n{:#?}\n", curves),
+        2.. => panic!("Multiple curves are not supported, please select only one."),
+        _ => (),
+    };
+}
+
 fn main() {
-    let curve = "FEATURE_BLS12_377";
+    feature_check();
+
+    let mut curve = "";
+    if cfg!(feature = "bn254") {
+        curve = "FEATURE_BN254";
+    } else if cfg!(feature = "bls12_377") {
+        curve = "FEATURE_BLS12_377";
+    } else if cfg!(feature = "bls12_381") {
+        curve = "FEATURE_BLS12_381";
+    }
 
     // account for cross-compilation [by examining environment variable]
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
@@ -74,8 +101,8 @@ fn main() {
         nvcc.cuda(true);
         nvcc.flag("-arch=sm_70");
         nvcc.flag("-maxrregcount=255");
-        nvcc.flag("--default-stream=per-thread");
-        nvcc.flag("-Xcompiler").flag("-Wno-unused-function");
+        //nvcc.flag("--default-stream=per-thread");
+        //nvcc.flag("-Xcompiler").flag("-Wno-unused-function");
         nvcc.define("TAKE_RESPONSIBILITY_FOR_ERROR_MESSAGE", None);
         nvcc.define(curve, None);
         if let Some(def) = cc_opt {
@@ -92,7 +119,5 @@ fn main() {
         println!("cargo:rustc-cfg=feature=\"cuda\"");
         println!("cargo:rerun-if-changed=cuda");
         println!("cargo:rerun-if-env-changed=CXXFLAGS");
-    } else {
-        panic!("nvcc must be in the path. Consider adding /usr/local/cuda/bin.")
     }
 }
