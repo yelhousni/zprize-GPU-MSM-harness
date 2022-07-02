@@ -24,7 +24,7 @@ static const int NTHRBITS = log2(NTHREADS);
 # define NBITS 253
 #endif
 #ifndef WBITS
-# define WBITS 17
+# define WBITS 9
 #endif
 #define NWINS ((NBITS+WBITS-1)/WBITS)   // ceil(NBITS/WBITS)
 
@@ -87,6 +87,11 @@ static __device__ int is_unique(int wval, int dir=0)
     wvals[tid] = wval;
     NTHREADS > WARP_SZ ? __syncthreads() : __syncwarp();
 
+    // tells every other thread to sleep for 100 ns to expose the race condition
+    if (threadIdx.x & 1) {
+      __nanosleep(100);
+    }
+
     // Straightforward scan appears to be the fastest option for NTHREADS.
     // Bitonic sort complexity, a.k.a. amount of iterations, is [~3x] lower,
     // but each step is [~5x] slower...
@@ -99,6 +104,11 @@ static __device__ int is_unique(int wval, int dir=0)
             uniq = 0;
         negatives += (b < 0);
     }
+
+    // This syncthreads fixes the race condition.
+    // When not present (commented), cargo test hangs indefinitely at "running 1 test".
+    // When present, cargo test completes with correct results in < 20ish sec on A10G.
+    // __syncthreads();
 
     return uniq | (int)(NTHREADS-1-negatives)>>31;
     // return value is 1, 0 or -1.
