@@ -100,6 +100,8 @@ static __device__ int is_unique(int wval, int dir=0)
         negatives += (b < 0);
     }
 
+    __syncthreads();
+
     return uniq | (int)(NTHREADS-1-negatives)>>31;
     // return value is 1, 0 or -1.
 }
