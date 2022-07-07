@@ -84,6 +84,7 @@ static __device__ int is_unique(int wval, int dir=0)
     const uint32_t tid = threadIdx.x;
     dir &= 1;   // force logical operations on predicates
 
+    NTHREADS > WARP_SZ ? __syncthreads() : __syncwarp();
     wvals[tid] = wval;
     NTHREADS > WARP_SZ ? __syncthreads() : __syncwarp();
 
@@ -358,7 +359,7 @@ public:
         }
         return d_ptrs[i];
     }
-    
+
 };
 
 // Pippenger MSM class
@@ -378,7 +379,7 @@ private:
 
     // GPU device number
     int device;
-    
+
     // TODO: Move to device class eventually
     thread_pool_t *da_pool = nullptr;
 
@@ -418,7 +419,7 @@ public:
             if (da_pool == nullptr) {
                 da_pool = new thread_pool_t();
             }
-            
+
             init_done = true;
         }
     }
@@ -426,23 +427,23 @@ public:
     int get_device() {
         return device;
     }
-    
+
     // Initialize parameters for a specific size MSM. Throws cuda_error on error.
     MSMConfig init_msm(size_t npoints) {
         init();
-        
+
         MSMConfig config;
         config.npoints = npoints;
 
         config.n = (npoints+WARP_SZ-1) & ((size_t)0-WARP_SZ);
-  
+
         config.N = (sm_count*256) / (NTHREADS*NWINS);
         size_t delta = ((npoints+(config.N)-1)/(config.N)+WARP_SZ-1) & (0U-WARP_SZ);
         config.N = (npoints+delta-1) / delta;
 
         return config;
     }
-    
+
     size_t get_size_bases(MSMConfig& config) {
         return config.n * sizeof(affine_t);
     }
@@ -529,7 +530,7 @@ public:
         CUDA_OK(cudaSetDevice(device));
         CUDA_OK(cudaStreamSynchronize(default_stream));
     }
-    
+
     // Perform accumulation into buckets on GPU. Throws cuda_error on error.
     void launch_kernel(MSMConfig& config,
                        size_t d_bases_idx, size_t d_scalars_idx, size_t d_buckets_idx,
@@ -543,14 +544,14 @@ public:
             reinterpret_cast<decltype(d_buckets)>(d_bucket_ptrs[d_buckets_idx]);
 
         bucket_t (*d_none)[NWINS][NTHREADS][2] = nullptr;
-        
+
         CUDA_OK(cudaSetDevice(device));
         launch_coop(pippenger, dim3(NWINS, config.N), NTHREADS, stream,
                     (const affine_t*)d_points, config.npoints,
                     (const scalar_t*)d_scalars, mont,
                     d_buckets, d_none);
     }
-    
+
     // Perform final accumulation on CPU.
     void accumulate(MSMConfig& config, point_t &out, result_container_t &res) {
         struct tile_t {
@@ -559,16 +560,16 @@ public:
             tile_t() {}
         };
         vector<tile_t> grid(NWINS*config.N);
-        
+
         size_t y = NWINS-1, total = 0;
-        
+
         while (total < config.N) {
             grid[total].x  = total;
             grid[total].y  = y;
             grid[total].dy = NBITS - y*WBITS;
             total++;
         }
-        
+
         while (y--) {
             for (size_t i = 0; i < config.N; i++, total++) {
                 grid[total].x  = grid[i].x;
@@ -576,11 +577,11 @@ public:
                 grid[total].dy = WBITS;
             }
         }
-        
+
         vector<atomic<size_t>> row_sync(NWINS); /* zeroed */
         counter_t<size_t> counter(0);
         channel_t<size_t> ch;
-        
+
         auto n_workers = min(da_pool->size(), total);
         while (n_workers--) {
             da_pool->spawn([&, total, counter]() {
@@ -593,7 +594,7 @@ public:
                 }
             });
         }
-        
+
         out.inf();
         size_t row = 0, ny = NWINS;
         while (ny--) {
@@ -636,7 +637,7 @@ public:
             if (get_num_bucket_ptrs() == 0) {
                 allocate_d_buckets(config);
             }
-            
+
             transfer_bases_to_device(config, d_bases, points, ffi_affine_sz);
             transfer_scalars_to_device(config, d_scalars, scalars);
             launch_kernel(config, d_bases, d_scalars, d_buckets, mont);
@@ -655,7 +656,7 @@ public:
             return RustError{e.code()}
 #endif
         }
-        
+
         return RustError{cudaSuccess};
     }
 };
